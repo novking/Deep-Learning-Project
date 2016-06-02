@@ -32,22 +32,18 @@ References:
                  Christopher M. Bishop, section 4.3.2
 
 """
-
-from __future__ import print_function
-
 __docformat__ = 'restructedtext en'
 
-import six.moves.cPickle as pickle
+import pickle
 import gzip
 import os
 import sys
 import timeit
-import unPickle
+
 import numpy
 
 import theano
 import theano.tensor as T
-
 
 class LogisticRegression(object):
     """Multi-class Logistic Regression Class
@@ -184,18 +180,38 @@ def load_data(dataset):
     #############
 
     # Download the MNIST dataset if it is not present
-    
+    data_dir, data_file = os.path.split(dataset)
+    if data_dir == "" and not os.path.isfile(dataset):
+        # Check if dataset is in the data directory.
+        new_path = os.path.join(
+            os.path.split(__file__)[0],
+            "..",
+            "data",
+            dataset
+        )
+        if os.path.isfile(new_path) or data_file == 'mnist.pkl.gz':
+            dataset = new_path
+
+    if (not os.path.isfile(dataset)) and data_file == 'mnist.pkl.gz':
+        import urllib.request
+        origin = (
+            'http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'
+        )
+        print('Downloading data from %s', origin)
+        urllib.request.urlretrieve(origin, dataset)
 
     print('... loading data')
 
     # Load the dataset
-   
-    # train_set, valid_set, test_set format: tuple(input, target)
-    # input is a numpy.ndarray of 2 dimensions (a matrix)
-    # where each row corresponds to an example. target is a
-    # numpy.ndarray of 1 dimension (vector) that has the same length as
-    # the number of rows in the input. It should give the target
-    # to the example with the same index in the input.
+    f = gzip.open(dataset, 'rb')
+    train_set, valid_set, test_set = pickle.load(f, encoding='latin1')
+    f.close()
+    #train_set, valid_set, test_set format: tuple(input, target)
+    #input is an numpy.ndarray of 2 dimensions (a matrix)
+    #witch row's correspond to an example. target is a
+    #numpy.ndarray of 1 dimensions (vector)) that have the same length as
+    #the number of rows in the input. It should give the target
+    #target to the example with the same index in the input.
 
     def shared_dataset(data_xy, borrow=True):
         """ Function that loads the dataset into shared variables
@@ -221,12 +237,7 @@ def load_data(dataset):
         # ``shared_y`` we will have to cast it to int. This little hack
         # lets ous get around this issue
         return shared_x, T.cast(shared_y, 'int32')
-    train_set,valid_set,test_set = unPickle.mnistCompare('mnist.pkl.gz')
-    
-  #  train_set, lengthOfInput_train_set = unPickle.convertData('encoded_train_pickle')
-  #  valid_set, lengthOfInput_valid_set = unPickle.convertData('encoded_valid_pickle')
-  #  test_set, lengthOfInput_test_set = unPickle.convertData('encoded_test_pickle')
-    
+
     test_set_x, test_set_y = shared_dataset(test_set)
     valid_set_x, valid_set_y = shared_dataset(valid_set)
     train_set_x, train_set_y = shared_dataset(train_set)
@@ -236,9 +247,9 @@ def load_data(dataset):
     return rval
 
 
-def sgd_optimization_mnist(learning_rate=0.1, n_epochs=1000,
+def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000,
                            dataset='mnist.pkl.gz',
-                           batch_size=900):
+                           batch_size=600):
     """
     Demonstrate stochastic gradient descent optimization of a log-linear
     model
@@ -264,9 +275,9 @@ def sgd_optimization_mnist(learning_rate=0.1, n_epochs=1000,
     test_set_x, test_set_y = datasets[2]
 
     # compute number of minibatches for training, validation and testing
-    n_train_batches = train_set_x.get_value(borrow=True).shape[0] // batch_size
-    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] // batch_size
-    n_test_batches = test_set_x.get_value(borrow=True).shape[0] // batch_size
+    n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
+    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] / batch_size
+    n_test_batches = test_set_x.get_value(borrow=True).shape[0] / batch_size
 
     ######################
     # BUILD ACTUAL MODEL #
@@ -283,7 +294,7 @@ def sgd_optimization_mnist(learning_rate=0.1, n_epochs=1000,
 
     # construct the logistic regression class
     # Each MNIST image has size 28*28
-    classifier = LogisticRegression(input=x, n_in=28*28, n_out=10)
+    classifier = LogisticRegression(input=x, n_in=28 * 28, n_out=10)
 
     # the cost we minimize during training is the negative log likelihood of
     # the model in symbolic format
@@ -343,7 +354,7 @@ def sgd_optimization_mnist(learning_rate=0.1, n_epochs=1000,
                                   # found
     improvement_threshold = 0.995  # a relative improvement of this much is
                                   # considered significant
-    validation_frequency = min(n_train_batches, patience // 2)
+    validation_frequency = min(n_train_batches, patience / 2)
                                   # go through this many
                                   # minibatche before checking the network
                                   # on the validation set; in this case we
@@ -407,7 +418,7 @@ def sgd_optimization_mnist(learning_rate=0.1, n_epochs=1000,
                     )
 
                     # save the best model
-                    with open('best_model.pkl', 'wb') as f:
+                    with open('best_model.pkl', 'w') as f:
                         pickle.dump(classifier, f)
 
             if patience <= iter:
@@ -419,14 +430,12 @@ def sgd_optimization_mnist(learning_rate=0.1, n_epochs=1000,
         (
             'Optimization complete with best validation score of %f %%,'
             'with test performance %f %%'
-        )
-        % (best_validation_loss * 100., test_score * 100.)
+        ), (best_validation_loss * 100., test_score * 100.)
     )
-    print('The code run for %d epochs, with %f epochs/sec' % (
+    print('The code run for %d epochs, with %f epochs/sec', (
         epoch, 1. * epoch / (end_time - start_time)))
-    print(('The code for file ' +
-           os.path.split(__file__)[1] +
-           ' ran for %.1fs' % ((end_time - start_time))), file=sys.stderr)
+    print ('The code for file ' + os.path.split(__file__)[1] +
+                          ' ran for %.1fs' % ((end_time - start_time)), file=sys.stderr)
 
 
 def predict():
@@ -450,8 +459,8 @@ def predict():
     test_set_x = test_set_x.get_value()
 
     predicted_values = predict_model(test_set_x[:10])
-    print("Predicted values for the first 10 examples in test set:")
-    print(predicted_values)
+    print ("Predicted values for the first 10 examples in test set:")
+    print (predicted_values)
 
 
 if __name__ == '__main__':
