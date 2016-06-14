@@ -37,3 +37,7 @@ class DrugBank:
 
     def predicted_proerties(self, element_text):
         pass
+
+    def type(self,element_itself):
+        content = element_itself.attrib
+        return content['type']
